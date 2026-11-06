@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Morpion — deux joueurs</title>
+  <style>
+    :root { color-scheme: light; --ink:#17212b; --muted:#607080; --paper:#f4f7fb; --blue:#3275d9; --coral:#e86655; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; display:grid; place-items:center; padding:24px; background:radial-gradient(ellipse at 20% 10%,#e4efff,transparent 45%),var(--paper); color:var(--ink); font-family:ui-rounded,"Segoe UI",system-ui,sans-serif; }
+    main { width:min(100%,460px); text-align:center; }
+    .eyebrow { margin:0 0 8px; color:var(--blue); font-size:.78rem; font-weight:800; letter-spacing:.16em; text-transform:uppercase; }
+    h1 { margin:0; font-size:clamp(2.5rem,10vw,4rem); line-height:1; letter-spacing:-.06em; }
+    .subtitle { color:var(--muted); margin:12px 0 24px; }
+    .status { min-height:60px; display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:16px; padding:12px 18px; border:1px solid #dce5ef; border-radius:16px; background:#fff; box-shadow:0 6px 20px #23344b0b; font-size:1.05rem; font-weight:700; }
+    .status-mark { display:inline-grid; place-items:center; width:32px; height:32px; border-radius:10px; background:#edf3fc; color:var(--blue); font-size:1.2rem; font-weight:900; }
+    .status[data-player="O"] .status-mark { background:#fff0ed; color:var(--coral); }
+    .status[data-result="win"] .status-mark { background:#e8f7ef; color:#258451; }
+    .status[data-result="draw"] .status-mark { background:#f0eff8; color:#6557a5; }
+    .board { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; padding:10px; border-radius:22px; background:#e5ebf3; box-shadow:0 18px 45px #263b5517; }
+    .cell { aspect-ratio:1; display:grid; place-items:center; border:0; border-radius:15px; background:#fff; color:var(--blue); cursor:pointer; font:900 clamp(3.5rem,16vw,5.5rem)/1 ui-rounded,"Segoe UI",system-ui,sans-serif; transition:transform .12s,background .12s,box-shadow .12s; }
+    .cell[data-mark="O"] { color:var(--coral); }
+    .cell:empty:hover:not(:disabled) { background:#f7faff; transform:translateY(-2px); box-shadow:0 5px 14px #263b5510; }
+    .cell:focus-visible, .new-game:focus-visible { outline:3px solid #75a7f2; outline-offset:3px; }
+    .cell:disabled { cursor:default; }
+    .cell.winning { background:#e8f7ef; color:#258451; }
+    .new-game { margin-top:20px; padding:13px 20px; border:0; border-radius:13px; background:var(--ink); color:#fff; font:750 1rem inherit; cursor:pointer; box-shadow:0 7px 18px #17212b22; transition:transform .12s,background .12s; }
+    .new-game:hover { background:#2d3d4e; transform:translateY(-1px); }
+    .hint { margin:14px 0 0; color:var(--muted); font-size:.88rem; }
+    @media (prefers-reduced-motion:reduce) { *,*::before,*::after { transition:none!important; } }
+  </style>
+</head>
+<body>
+  <main>
+    <p class="eyebrow">Duel sur le même écran</p>
+    <h1>Morpion</h1>
+    <p class="subtitle">Alignez trois symboles pour gagner.</p>
+    <div class="status" id="status" aria-live="polite" data-player="X">
+      <span class="status-mark" id="statusMark" aria-hidden="true">X</span>
+      <span id="statusText">Au tour de X</span>
+    </div>
+    <div class="board" role="group" aria-label="Grille de morpion">
+      <button class="cell" type="button" data-index="0" aria-label="Ligne 1, colonne 1"></button>
+      <button class="cell" type="button" data-index="1" aria-label="Ligne 1, colonne 2"></button>
+      <button class="cell" type="button" data-index="2" aria-label="Ligne 1, colonne 3"></button>
+      <button class="cell" type="button" data-index="3" aria-label="Ligne 2, colonne 1"></button>
+      <button class="cell" type="button" data-index="4" aria-label="Ligne 2, colonne 2"></button>
+      <button class="cell" type="button" data-index="5" aria-label="Ligne 2, colonne 3"></button>
+      <button class="cell" type="button" data-index="6" aria-label="Ligne 3, colonne 1"></button>
+      <button class="cell" type="button" data-index="7" aria-label="Ligne 3, colonne 2"></button>
+      <button class="cell" type="button" data-index="8" aria-label="Ligne 3, colonne 3"></button>
+    </div>
+    <button class="new-game" id="newGame" type="button">Nouvelle partie</button>
+    <p class="hint">X commence · Cliquez sur une case libre</p>
+  </main>
+  <script>
+    (() => {
+      const cells = [...document.querySelectorAll('.cell')];
+      const status = document.getElementById('status');
+      const statusText = document.getElementById('statusText');
+      const statusMark = document.getElementById('statusMark');
+      const newGame = document.getElementById('newGame');
+      const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+      let board = Array(9).fill('');
+      let player = 'X';
+      let finished = false;
+
+      function showTurn() {
+        status.dataset.player = player;
+        status.dataset.result = '';
+        statusMark.textContent = player;
+        statusText.textContent = `Au tour de ${player}`;
+      }
+
+      function play(index) {
+        if (finished || board[index]) return;
+        board[index] = player;
+        const cell = cells[index];
+        cell.textContent = player;
+        cell.dataset.mark = player;
+        cell.setAttribute('aria-label', `${cell.getAttribute('aria-label')}, ${player}`);
+
+        const winningLine = lines.find(line => line.every(i => board[i] === player));
+        if (winningLine) {
+          finished = true;
+          winningLine.forEach(i => cells[i].classList.add('winning'));
+          status.dataset.result = 'win';
+          status.dataset.player = '';
+          statusMark.textContent = '✓';
+          statusText.textContent = `${player} a gagné !`;
+          cells.forEach(button => button.disabled = true);
+          return;
+        }
+        if (board.every(Boolean)) {
+          finished = true;
+          status.dataset.result = 'draw';
+          status.dataset.player = '';
+          statusMark.textContent = '=';
+          statusText.textContent = 'Match nul !';
+          cells.forEach(button => button.disabled = true);
+          return;
+        }
+        player = player === 'X' ? 'O' : 'X';
+        showTurn();
+      }
+
+      cells.forEach((cell, index) => cell.addEventListener('click', () => play(index)));
+      newGame.addEventListener('click', () => {
+        board = Array(9).fill('');
+        player = 'X';
+        finished = false;
+        cells.forEach(cell => {
+          cell.textContent = '';
+          delete cell.dataset.mark;
+          cell.classList.remove('winning');
+          cell.disabled = false;
+          const label = cell.getAttribute('aria-label');
+          cell.setAttribute('aria-label', label.replace(/, [XO]$/, ''));
+        });
+        showTurn();
+        cells[0].focus();
+      });
+    })();
+  </script>
+</body>
+</html>
